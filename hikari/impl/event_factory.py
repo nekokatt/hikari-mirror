@@ -203,6 +203,7 @@ class EventFactoryImpl(event_factory.EventFactory):
     ) -> guild_events.GuildAvailableEvent:
         guild_information = self._app.entity_factory.deserialize_gateway_guild(
             payload,
+            include_guild=True,
             include_channels=True,
             include_members=True,
             include_presences=True,
@@ -210,6 +211,7 @@ class EventFactoryImpl(event_factory.EventFactory):
             include_emojis=True,
             include_roles=True,
         )
+        assert guild_information.guild is not None
         assert guild_information.channels is not None
         assert guild_information.emojis is not None
         assert guild_information.members is not None
@@ -235,8 +237,9 @@ class EventFactoryImpl(event_factory.EventFactory):
         old_guild: typing.Optional[guild_models.Guild],
     ) -> guild_events.GuildUpdateEvent:
         guild_information = self._app.entity_factory.deserialize_gateway_guild(
-            payload, include_emojis=True, include_roles=True
+            payload, include_guild=True, include_emojis=True, include_roles=True
         )
+        assert guild_information.guild is not None
         assert guild_information.emojis is not None
         assert guild_information.roles is not None
         return guild_events.GuildUpdateEvent(
