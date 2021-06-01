@@ -98,7 +98,7 @@ class EventManagerImpl(event_manager_base.EventManagerBase):
         self._cache = cache
         super().__init__(event_factory=event_factory, intents=intents)
 
-    @event_manager_base.as_listener(shard_events.ShardReadyEvent, config.CacheComponents.ME)
+    @event_manager_base.filtered(shard_events.ShardReadyEvent, config.CacheComponents.ME)
     async def on_ready(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
         """See https://discord.com/developers/docs/topics/gateway#ready for more info."""
         # TODO: cache unavailable guilds on startup, I didn't bother for the time being.
@@ -109,12 +109,12 @@ class EventManagerImpl(event_manager_base.EventManagerBase):
 
         await self.dispatch(event)
 
-    @event_manager_base.as_listener(shard_events.ShardResumedEvent)
+    @event_manager_base.filtered(shard_events.ShardResumedEvent)
     async def on_resumed(self, shard: gateway_shard.GatewayShard, _: data_binding.JSONObject) -> None:
         """See https://discord.com/developers/docs/topics/gateway#resumed for more info."""
         await self.dispatch(self._event_factory.deserialize_resumed_event(shard))
 
-    @event_manager_base.as_listener(channel_events.GuildChannelCreateEvent, config.CacheComponents.GUILD_CHANNELS)
+    @event_manager_base.filtered(channel_events.GuildChannelCreateEvent, config.CacheComponents.GUILD_CHANNELS)
     async def on_channel_create(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
         """See https://discord.com/developers/docs/topics/gateway#channel-create for more info."""
         event = self._event_factory.deserialize_channel_create_event(shard, payload)
@@ -127,7 +127,7 @@ class EventManagerImpl(event_manager_base.EventManagerBase):
 
         await self.dispatch(event)
 
-    @event_manager_base.as_listener(channel_events.GuildChannelUpdateEvent, config.CacheComponents.GUILD_CHANNELS)
+    @event_manager_base.filtered(channel_events.GuildChannelUpdateEvent, config.CacheComponents.GUILD_CHANNELS)
     async def on_channel_update(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
         """See https://discord.com/developers/docs/topics/gateway#channel-update for more info."""
         old = self._cache.get_guild_channel(snowflakes.Snowflake(payload["id"])) if self._cache else None
@@ -141,7 +141,7 @@ class EventManagerImpl(event_manager_base.EventManagerBase):
 
         await self.dispatch(event)
 
-    @event_manager_base.as_listener(channel_events.GuildChannelDeleteEvent, config.CacheComponents.GUILD_CHANNELS)
+    @event_manager_base.filtered(channel_events.GuildChannelDeleteEvent, config.CacheComponents.GUILD_CHANNELS)
     async def on_channel_delete(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
         """See https://discord.com/developers/docs/topics/gateway#channel-delete for more info."""
         event = self._event_factory.deserialize_channel_delete_event(shard, payload)
@@ -151,27 +151,17 @@ class EventManagerImpl(event_manager_base.EventManagerBase):
 
         await self.dispatch(event)
 
-    @event_manager_base.as_listener((channel_events.GuildPinsUpdateEvent, channel_events.DMPinsUpdateEvent))
+    @event_manager_base.filtered((channel_events.GuildPinsUpdateEvent, channel_events.DMPinsUpdateEvent))
     async def on_channel_pins_update(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
         """See https://discord.com/developers/docs/topics/gateway#channel-pins-update for more info."""
         # TODO: we need a method for this specifically
         await self.dispatch(self._event_factory.deserialize_channel_pins_update_event(shard, payload))
 
-    @event_manager_base.as_listener(
-        guild_events.GuildAvailableEvent,
-        config.CacheComponents.GUILDS
-        | config.CacheComponents.GUILD_CHANNELS
-        | config.CacheComponents.EMOJIS
-        | config.CacheComponents.ROLES
-        | config.CacheComponents.PRESENCES
-        | config.CacheComponents.VOICE_STATES
-        | config.CacheComponents.MEMBERS,
-    )
+    # on_guild_create prefers internal granularity over filtering with event_manager_base.filtered
     async def on_guild_create(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
         """See https://discord.com/developers/docs/topics/gateway#guild-create for more info."""
-        event: typing.Optional[guild_events.GuildAvailableEvent] = None
-
         if not self._enabled_for(guild_events.GuildAvailableEvent):
+            event: typing.Optional[guild_events.GuildAvailableEvent] = None
             guild_definition = self._app.entity_factory.deserialize_gateway_guild(
                 payload,
                 include_channels=self._cache_enabled_for_any(config.CacheComponents.GUILD_CHANNELS),
@@ -258,14 +248,11 @@ class EventManagerImpl(event_manager_base.EventManagerBase):
         if event:
             await self.dispatch(event)
 
-    @event_manager_base.as_listener(
-        guild_events.GuildUpdateEvent,
-        config.CacheComponents.GUILDS | config.CacheComponents.ROLES | config.CacheComponents.EMOJIS,
-    )
+    # on_guild_update prefers internal granularity over filtering with event_manager_base.filtered
     async def on_guild_update(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
         """See https://discord.com/developers/docs/topics/gateway#guild-update for more info."""
-        event: typing.Optional[guild_events.GuildUpdateEvent] = None
         if not self._enabled_for(guild_events.GuildUpdateEvent):
+            event: typing.Optional[guild_events.GuildUpdateEvent] = None
             guild_definition = self._app.entity_factory.deserialize_gateway_guild(
                 payload,
                 include_emojis=self._cache_enabled_for_any(config.CacheComponents.EMOJIS),
@@ -298,7 +285,7 @@ class EventManagerImpl(event_manager_base.EventManagerBase):
         if event:
             await self.dispatch(event)
 
-    @event_manager_base.as_listener(
+    @event_manager_base.filtered(
         (guild_events.GuildLeaveEvent, guild_events.GuildUnavailableEvent),
         config.CacheComponents.GUILDS
         | config.CacheComponents.GUILD_CHANNELS
@@ -333,17 +320,17 @@ class EventManagerImpl(event_manager_base.EventManagerBase):
 
         await self.dispatch(event)
 
-    @event_manager_base.as_listener(guild_events.BanCreateEvent)
+    @event_manager_base.filtered(guild_events.BanCreateEvent)
     async def on_guild_ban_add(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
         """See https://discord.com/developers/docs/topics/gateway#guild-ban-add for more info."""
         await self.dispatch(self._event_factory.deserialize_guild_ban_add_event(shard, payload))
 
-    @event_manager_base.as_listener(guild_events.BanDeleteEvent)
+    @event_manager_base.filtered(guild_events.BanDeleteEvent)
     async def on_guild_ban_remove(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
         """See https://discord.com/developers/docs/topics/gateway#guild-ban-remove for more info."""
         await self.dispatch(self._event_factory.deserialize_guild_ban_remove_event(shard, payload))
 
-    @event_manager_base.as_listener(guild_events.EmojisUpdateEvent, config.CacheComponents.EMOJIS)
+    @event_manager_base.filtered(guild_events.EmojisUpdateEvent, config.CacheComponents.EMOJIS)
     async def on_guild_emojis_update(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
         """See https://discord.com/developers/docs/topics/gateway#guild-emojis-update for more info."""
         guild_id = snowflakes.Snowflake(payload["guild_id"])
@@ -357,29 +344,29 @@ class EventManagerImpl(event_manager_base.EventManagerBase):
 
         await self.dispatch(event)
 
-    @event_manager_base.as_listener(())
+    @event_manager_base.filtered(())
     async def on_guild_integrations_update(self, _: gateway_shard.GatewayShard, __: data_binding.JSONObject) -> None:
         """See https://discord.com/developers/docs/topics/gateway#guild-integrations-update for more info."""
         # This is only here to stop this being logged or dispatched as an "unknown event".
         # This event is made redundant by INTEGRATION_CREATE/DELETE/UPDATE and is thus not parsed or dispatched.
         return None
 
-    @event_manager_base.as_listener(guild_events.IntegrationCreateEvent)
+    @event_manager_base.filtered(guild_events.IntegrationCreateEvent)
     async def on_integration_create(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
         event = self._event_factory.deserialize_integration_create_event(shard, payload)
         await self.dispatch(event)
 
-    @event_manager_base.as_listener(guild_events.IntegrationDeleteEvent)
+    @event_manager_base.filtered(guild_events.IntegrationDeleteEvent)
     async def on_integration_delete(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
         event = self._event_factory.deserialize_integration_delete_event(shard, payload)
         await self.dispatch(event)
 
-    @event_manager_base.as_listener(guild_events.IntegrationUpdateEvent)
+    @event_manager_base.filtered(guild_events.IntegrationUpdateEvent)
     async def on_integration_update(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
         event = self._event_factory.deserialize_integration_update_event(shard, payload)
         await self.dispatch(event)
 
-    @event_manager_base.as_listener(member_events.MemberCreateEvent, config.CacheComponents.MEMBERS)
+    @event_manager_base.filtered(member_events.MemberCreateEvent, config.CacheComponents.MEMBERS)
     async def on_guild_member_add(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
         """See https://discord.com/developers/docs/topics/gateway#guild-member-add for more info."""
         event = self._event_factory.deserialize_guild_member_add_event(shard, payload)
@@ -389,7 +376,7 @@ class EventManagerImpl(event_manager_base.EventManagerBase):
 
         await self.dispatch(event)
 
-    @event_manager_base.as_listener(member_events.MemberDeleteEvent, config.CacheComponents.MEMBERS)
+    @event_manager_base.filtered(member_events.MemberDeleteEvent, config.CacheComponents.MEMBERS)
     async def on_guild_member_remove(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
         """See https://discord.com/developers/docs/topics/gateway#guild-member-remove for more info."""
         old: typing.Optional[guilds.Member] = None
@@ -401,7 +388,7 @@ class EventManagerImpl(event_manager_base.EventManagerBase):
         event = self._event_factory.deserialize_guild_member_remove_event(shard, payload, old_member=old)
         await self.dispatch(event)
 
-    @event_manager_base.as_listener(member_events.MemberUpdateEvent, config.CacheComponents.MEMBERS)
+    @event_manager_base.filtered(member_events.MemberUpdateEvent, config.CacheComponents.MEMBERS)
     async def on_guild_member_update(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
         """See https://discord.com/developers/docs/topics/gateway#guild-member-update for more info."""
         old: typing.Optional[guilds.Member] = None
@@ -417,7 +404,7 @@ class EventManagerImpl(event_manager_base.EventManagerBase):
 
         await self.dispatch(event)
 
-    @event_manager_base.as_listener(shard_events.MemberChunkEvent, config.CacheComponents.MEMBERS)
+    @event_manager_base.filtered(shard_events.MemberChunkEvent, config.CacheComponents.MEMBERS)
     async def on_guild_members_chunk(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
         """See https://discord.com/developers/docs/topics/gateway#guild-members-chunk for more info."""
         event = self._event_factory.deserialize_guild_member_chunk_event(shard, payload)
@@ -431,7 +418,7 @@ class EventManagerImpl(event_manager_base.EventManagerBase):
 
         await self.dispatch(event)
 
-    @event_manager_base.as_listener(role_events.RoleCreateEvent, config.CacheComponents.ROLES)
+    @event_manager_base.filtered(role_events.RoleCreateEvent, config.CacheComponents.ROLES)
     async def on_guild_role_create(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
         """See https://discord.com/developers/docs/topics/gateway#guild-role-create for more info."""
         event = self._event_factory.deserialize_guild_role_create_event(shard, payload)
@@ -441,7 +428,7 @@ class EventManagerImpl(event_manager_base.EventManagerBase):
 
         await self.dispatch(event)
 
-    @event_manager_base.as_listener(role_events.RoleUpdateEvent, config.CacheComponents.ROLES)
+    @event_manager_base.filtered(role_events.RoleUpdateEvent, config.CacheComponents.ROLES)
     async def on_guild_role_update(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
         """See https://discord.com/developers/docs/topics/gateway#guild-role-update for more info."""
         old = self._cache.get_role(snowflakes.Snowflake(payload["role"]["id"])) if self._cache else None
@@ -452,7 +439,7 @@ class EventManagerImpl(event_manager_base.EventManagerBase):
 
         await self.dispatch(event)
 
-    @event_manager_base.as_listener(role_events.RoleDeleteEvent, config.CacheComponents.ROLES)
+    @event_manager_base.filtered(role_events.RoleDeleteEvent, config.CacheComponents.ROLES)
     async def on_guild_role_delete(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
         """See https://discord.com/developers/docs/topics/gateway#guild-role-delete for more info."""
         old: typing.Optional[guilds.Role] = None
@@ -463,7 +450,7 @@ class EventManagerImpl(event_manager_base.EventManagerBase):
 
         await self.dispatch(event)
 
-    @event_manager_base.as_listener(channel_events.InviteCreateEvent, config.CacheComponents.INVITES)
+    @event_manager_base.filtered(channel_events.InviteCreateEvent, config.CacheComponents.INVITES)
     async def on_invite_create(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
         """See https://discord.com/developers/docs/topics/gateway#invite-create for more info."""
         event = self._event_factory.deserialize_invite_create_event(shard, payload)
@@ -473,7 +460,7 @@ class EventManagerImpl(event_manager_base.EventManagerBase):
 
         await self.dispatch(event)
 
-    @event_manager_base.as_listener(channel_events.InviteDeleteEvent, config.CacheComponents.INVITES)
+    @event_manager_base.filtered(channel_events.InviteDeleteEvent, config.CacheComponents.INVITES)
     async def on_invite_delete(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
         """See https://discord.com/developers/docs/topics/gateway#invite-delete for more info."""
         old: typing.Optional[invites.InviteWithMetadata] = None
@@ -484,7 +471,7 @@ class EventManagerImpl(event_manager_base.EventManagerBase):
 
         await self.dispatch(event)
 
-    @event_manager_base.as_listener(
+    @event_manager_base.filtered(
         (message_events.GuildMessageCreateEvent, message_events.DMMessageCreateEvent), config.CacheComponents.MESSAGES
     )
     async def on_message_create(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
@@ -496,7 +483,7 @@ class EventManagerImpl(event_manager_base.EventManagerBase):
 
         await self.dispatch(event)
 
-    @event_manager_base.as_listener(
+    @event_manager_base.filtered(
         (message_events.GuildMessageUpdateEvent, message_events.DMMessageUpdateEvent), config.CacheComponents.MESSAGES
     )
     async def on_message_update(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
@@ -509,7 +496,7 @@ class EventManagerImpl(event_manager_base.EventManagerBase):
 
         await self.dispatch(event)
 
-    @event_manager_base.as_listener(
+    @event_manager_base.filtered(
         (message_events.GuildMessageDeleteEvent, message_events.DMMessageDeleteEvent), config.CacheComponents.MESSAGES
     )
     async def on_message_delete(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
@@ -521,7 +508,7 @@ class EventManagerImpl(event_manager_base.EventManagerBase):
 
         await self.dispatch(event)
 
-    @event_manager_base.as_listener(
+    @event_manager_base.filtered(
         (message_events.GuildMessageDeleteEvent, message_events.DMMessageDeleteEvent), config.CacheComponents.MESSAGES
     )
     async def on_message_delete_bulk(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
@@ -534,7 +521,7 @@ class EventManagerImpl(event_manager_base.EventManagerBase):
 
         await self.dispatch(event)
 
-    @event_manager_base.as_listener((reaction_events.GuildReactionAddEvent, reaction_events.DMReactionAddEvent))
+    @event_manager_base.filtered((reaction_events.GuildReactionAddEvent, reaction_events.DMReactionAddEvent))
     async def on_message_reaction_add(
         self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject
     ) -> None:
@@ -543,14 +530,14 @@ class EventManagerImpl(event_manager_base.EventManagerBase):
 
     # TODO: this is unlikely but reaction cache?
 
-    @event_manager_base.as_listener((reaction_events.GuildReactionDeleteEvent, reaction_events.DMReactionDeleteEvent))
+    @event_manager_base.filtered((reaction_events.GuildReactionDeleteEvent, reaction_events.DMReactionDeleteEvent))
     async def on_message_reaction_remove(
         self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject
     ) -> None:
         """See https://discord.com/developers/docs/topics/gateway#message-reaction-remove for more info."""
         await self.dispatch(self._event_factory.deserialize_message_reaction_remove_event(shard, payload))
 
-    @event_manager_base.as_listener(
+    @event_manager_base.filtered(
         (reaction_events.GuildReactionDeleteAllEvent, reaction_events.DMReactionDeleteAllEvent)
     )
     async def on_message_reaction_remove_all(
@@ -559,7 +546,7 @@ class EventManagerImpl(event_manager_base.EventManagerBase):
         """See https://discord.com/developers/docs/topics/gateway#message-reaction-remove-all for more info."""
         await self.dispatch(self._event_factory.deserialize_message_reaction_remove_all_event(shard, payload))
 
-    @event_manager_base.as_listener(
+    @event_manager_base.filtered(
         (reaction_events.GuildReactionDeleteEmojiEvent, reaction_events.DMReactionDeleteEmojiEvent)
     )
     async def on_message_reaction_remove_emoji(
@@ -568,7 +555,7 @@ class EventManagerImpl(event_manager_base.EventManagerBase):
         """See https://discord.com/developers/docs/topics/gateway#message-reaction-remove-emoji for more info."""
         await self.dispatch(self._event_factory.deserialize_message_reaction_remove_emoji_event(shard, payload))
 
-    @event_manager_base.as_listener(guild_events.PresenceUpdateEvent, config.CacheComponents.PRESENCES)
+    @event_manager_base.filtered(guild_events.PresenceUpdateEvent, config.CacheComponents.PRESENCES)
     async def on_presence_update(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
         """See https://discord.com/developers/docs/topics/gateway#presence-update for more info."""
         old: typing.Optional[presences_.MemberPresence] = None
@@ -587,12 +574,12 @@ class EventManagerImpl(event_manager_base.EventManagerBase):
         # TODO: update user here when partial_user is set self._cache.update_user(event.partial_user)
         await self.dispatch(event)
 
-    @event_manager_base.as_listener((typing_events.GuildTypingEvent, typing_events.DMTypingEvent))
+    @event_manager_base.filtered((typing_events.GuildTypingEvent, typing_events.DMTypingEvent))
     async def on_typing_start(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
         """See https://discord.com/developers/docs/topics/gateway#typing-start for more info."""
         await self.dispatch(self._event_factory.deserialize_typing_start_event(shard, payload))
 
-    @event_manager_base.as_listener(user_events.OwnUserUpdateEvent, config.CacheComponents.ME)
+    @event_manager_base.filtered(user_events.OwnUserUpdateEvent, config.CacheComponents.ME)
     async def on_user_update(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
         """See https://discord.com/developers/docs/topics/gateway#user-update for more info."""
         old = self._cache.get_me() if self._cache else None
@@ -603,7 +590,7 @@ class EventManagerImpl(event_manager_base.EventManagerBase):
 
         await self.dispatch(event)
 
-    @event_manager_base.as_listener(voice_events.VoiceStateUpdateEvent, config.CacheComponents.VOICE_STATES)
+    @event_manager_base.filtered(voice_events.VoiceStateUpdateEvent, config.CacheComponents.VOICE_STATES)
     async def on_voice_state_update(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
         """See https://discord.com/developers/docs/topics/gateway#voice-state-update for more info."""
         old: typing.Optional[voices.VoiceState] = None
@@ -621,12 +608,12 @@ class EventManagerImpl(event_manager_base.EventManagerBase):
 
         await self.dispatch(event)
 
-    @event_manager_base.as_listener(voice_events.VoiceServerUpdateEvent)
+    @event_manager_base.filtered(voice_events.VoiceServerUpdateEvent)
     async def on_voice_server_update(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
         """See https://discord.com/developers/docs/topics/gateway#voice-server-update for more info."""
         await self.dispatch(self._event_factory.deserialize_voice_server_update_event(shard, payload))
 
-    @event_manager_base.as_listener(channel_events.WebhookUpdateEvent)
+    @event_manager_base.filtered(channel_events.WebhookUpdateEvent)
     async def on_webhooks_update(self, shard: gateway_shard.GatewayShard, payload: data_binding.JSONObject) -> None:
         """See https://discord.com/developers/docs/topics/gateway#webhooks-update for more info."""
         await self.dispatch(self._event_factory.deserialize_webhook_update_event(shard, payload))
