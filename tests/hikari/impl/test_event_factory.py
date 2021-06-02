@@ -241,7 +241,16 @@ class TestEventFactoryImpl:
 
         event = event_factory.deserialize_guild_create_event(mock_shard, mock_payload)
 
-        mock_app.entity_factory.deserialize_gateway_guild.assert_called_once_with(mock_payload)
+        mock_app.entity_factory.deserialize_gateway_guild.assert_called_once_with(
+            mock_payload,
+            include_guild=True,
+            include_channels=True,
+            include_members=True,
+            include_presences=True,
+            include_voice_states=True,
+            include_emojis=True,
+            include_roles=True,
+        )
         assert isinstance(event, guild_events.GuildAvailableEvent)
         assert event.shard is mock_shard
         assert event.guild is mock_app.entity_factory.deserialize_gateway_guild.return_value.guild
@@ -258,7 +267,9 @@ class TestEventFactoryImpl:
 
         event = event_factory.deserialize_guild_update_event(mock_shard, mock_payload, old_guild=mock_old_guild)
 
-        mock_app.entity_factory.deserialize_gateway_guild.assert_called_once_with(mock_payload)
+        mock_app.entity_factory.deserialize_gateway_guild.assert_called_once_with(
+            mock_payload, include_guild=True, include_emojis=True, include_roles=True
+        )
         assert isinstance(event, guild_events.GuildUpdateEvent)
         assert event.shard is mock_shard
         assert event.guild is mock_app.entity_factory.deserialize_gateway_guild.return_value.guild
