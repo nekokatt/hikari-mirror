@@ -7439,7 +7439,7 @@ class RESTClient(traits.NetworkSettingsAware, abc.ABC):
         self,
         channel: snowflakes.SnowflakeishOr[channels_.GuildStageChannel],
     ) -> stage_instances.StageInstance:
-        """Fetches the Stage instance associated with a guild stage channel.
+        """Fetch the Stage instance associated with a guild stage channel.
 
         Parameters
         ----------
@@ -7533,7 +7533,7 @@ class RESTClient(traits.NetworkSettingsAware, abc.ABC):
         topic: undefined.UndefinedOr[str] = undefined.UNDEFINED,
         privacy_level: undefined.UndefinedOr[stage_instances.StagePrivacyLevel] = undefined.UNDEFINED,
     ) -> stage_instances.StageInstance:
-        """Edits the Stage instance in a guild stage channel.
+        """Edit the Stage instance in a guild stage channel.
 
         !!! note
             This will raise `hikari.errors.UnauthorizedError` if the bot is not a moderator
@@ -7583,7 +7583,7 @@ class RESTClient(traits.NetworkSettingsAware, abc.ABC):
         self,
         channel: snowflakes.SnowflakeishOr[channels_.GuildStageChannel],
     ) -> stage_instances.StageInstance:
-        """Deletes the Stage instance.
+        """Delete the Stage instance.
 
         Parameters
         ----------
