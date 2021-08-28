@@ -139,13 +139,13 @@ class PartialUser(snowflakes.Unique, abc.ABC):
 
     @property
     @abc.abstractmethod
-    def banner_hash(self) -> undefined.UndefinedNoneOr[str]:
-        """Banner hash for the user, if they have one, otherwise `builtins.None`."""
+    def banner_hash(self) -> undefined.UndefinedOr[str]:
+        """Banner hash for the user, if they have one, otherwise `hikari.undefined.UNDEFINED`."""
 
     @property
     @abc.abstractmethod
-    def accent_color(self) -> undefined.UndefinedNoneOr[colors.Color]:
-        """The custom banner color for the user, if set.
+    def accent_color(self) -> undefined.UndefinedOr[colors.Color]:
+        """The custom banner color for the user, if set else `hikari.undefined.UNDEFINED`.
 
         The official client will decide the default color if not set.
         """  # noqa: D401 - Imperative mood
@@ -459,7 +459,7 @@ class User(PartialUser, abc.ABC):
 
     @property
     @abc.abstractmethod
-    def banner_hash(self) -> typing.Optional[str]:
+    def banner_hash(self) -> undefined.UndefinedOr[str]:
         """Banner hash for the user, if they have one, otherwise `builtins.None`."""
 
     @property
@@ -472,7 +472,7 @@ class User(PartialUser, abc.ABC):
 
     @property
     @abc.abstractmethod
-    def accent_color(self) -> typing.Optional[colors.Color]:
+    def accent_color(self) -> undefined.UndefinedOr[colors.Color]:
         """The custom banner color for the user, if set.
 
         The official client will decide the default color if not set.
@@ -610,7 +610,7 @@ class User(PartialUser, abc.ABC):
         builtins.ValueError
             If `size` is not a power of two or not between 16 and 4096.
         """
-        if self.banner_hash is None:
+        if self.banner_hash is undefined.UNDEFINED:
             return None
 
         if ext is None:
@@ -654,10 +654,10 @@ class PartialUserImpl(PartialUser):
     avatar_hash: undefined.UndefinedNoneOr[str] = attr.field(eq=False, hash=False, repr=False)
     """Avatar hash of the user, if a custom avatar is set."""
 
-    banner_hash: undefined.UndefinedNoneOr[str] = attr.field(eq=False, hash=False, repr=False)
+    banner_hash: undefined.UndefinedOr[str] = attr.field(eq=False, hash=False, repr=False)
     """Banner hash of the user, if a custom banner is set."""
 
-    accent_color: undefined.UndefinedNoneOr[colors.Color] = attr.field(eq=False, hash=False, repr=False)
+    accent_color: undefined.UndefinedOr[colors.Color] = attr.field(eq=False, hash=False, repr=False)
     """The custom banner color for the user, if set.
 
     The official client will decide the default color if not set.
@@ -714,10 +714,10 @@ class UserImpl(PartialUserImpl, User):
     avatar_hash: typing.Optional[str]
     """The user's avatar hash, if they have one, otherwise `builtins.None`."""
 
-    banner_hash: typing.Optional[str]
+    banner_hash: undefined.UndefinedOr[str]
     """Banner hash of the user, if they have one, otherwise `builtins.None`"""
 
-    accent_color: typing.Optional[colors.Color]
+    accent_color: undefined.UndefinedOr[colors.Color]
     """The custom banner color for the user, if set.
 
     The official client will decide the default color if not set.
