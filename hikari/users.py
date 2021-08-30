@@ -41,6 +41,7 @@ from hikari.internal import routes
 
 if typing.TYPE_CHECKING:
     from hikari import channels
+    from hikari import colors
     from hikari import embeds as embeds_
     from hikari import files
     from hikari import guilds
@@ -138,6 +139,32 @@ class PartialUser(snowflakes.Unique, abc.ABC):
 
     @property
     @abc.abstractmethod
+    def banner_hash(self) -> undefined.UndefinedOr[str]:
+        """Banner hash for the user, if they have one, otherwise `hikari.undefined.UNDEFINED`."""
+
+    @property
+    def banner_url(self) -> typing.Optional[files.URL]:
+        """Banner URL for the user, if they have one set.
+
+        May be `builtins.None` if no custom banner is set.
+        """
+        return self.make_banner_url()
+
+    @property
+    @abc.abstractmethod
+    def accent_color(self) -> undefined.UndefinedOr[colors.Color]:
+        """The custom banner color for the user, if set else `hikari.undefined.UNDEFINED`.
+
+        The official client will decide the default color if not set.
+        """  # noqa: D401 - Imperative mood
+
+    @property
+    def accent_colour(self) -> undefined.UndefinedOr[colors.Color]:
+        """Alias for `accent_color` field."""
+        return self.accent_color
+
+    @property
+    @abc.abstractmethod
     def discriminator(self) -> undefined.UndefinedOr[str]:
         """Discriminator for the user."""
 
@@ -179,6 +206,53 @@ class PartialUser(snowflakes.Unique, abc.ABC):
         builtins.str
             The mention string to use.
         """
+
+    def make_banner_url(self, *, ext: typing.Optional[str] = None, size: int = 4096) -> typing.Optional[files.URL]:
+        """Generate the banner URL for this user, if set.
+
+        If no custom banner is set, this returns `builtins.None`.
+
+        Parameters
+        ----------
+        ext : typing.Optional[builtins.str]
+            The ext to use for this URL, defaults to `png` or `gif`.
+            Supports `png`, `jpeg`, `jpg`, `webp` and `gif` (when
+            animated). Will be ignored for default banner which can only be
+            `png`.
+
+            If `builtins.None`, then the correct default extension is
+            determined based on whether the banner is animated or not.
+        size : builtins.int
+            The size to set for the URL, defaults to `4096`.
+            Can be any power of two between 16 and 4096.
+            Will be ignored for default banner.
+
+        Returns
+        -------
+        typing.Optional[hikari.files.URL]
+            The URL to the banner, or `builtins.None` if not present.
+
+        Raises
+        ------
+        builtins.ValueError
+            If `size` is not a power of two or not between 16 and 4096.
+        """
+        if self.banner_hash is undefined.UNDEFINED:
+            return None
+
+        if ext is None:
+            if self.banner_hash.startswith("a_"):
+                ext = "gif"
+            else:
+                ext = "png"
+
+        return routes.CDN_USER_BANNER.compile_to_file(
+            urls.CDN_URL,
+            user_id=self.id,
+            hash=self.banner_hash,
+            size=size,
+            file_format=ext,
+        )
 
     async def fetch_dm_channel(self) -> channels.DMChannel:
         """Fetch the DM channel for this user.
@@ -572,6 +646,15 @@ class PartialUserImpl(PartialUser):
     avatar_hash: undefined.UndefinedNoneOr[str] = attr.field(eq=False, hash=False, repr=False)
     """Avatar hash of the user, if a custom avatar is set."""
 
+    banner_hash: undefined.UndefinedOr[str] = attr.field(eq=False, hash=False, repr=False)
+    """Banner hash of the user, if a custom banner is set."""
+
+    accent_color: undefined.UndefinedOr[colors.Color] = attr.field(eq=False, hash=False, repr=False)
+    """The custom banner color for the user, if set.
+
+    The official client will decide the default color if not set.
+    """
+
     is_bot: undefined.UndefinedOr[bool] = attr.field(eq=False, hash=False, repr=True)
     """Whether this user is a bot account."""
 
@@ -622,6 +705,15 @@ class UserImpl(PartialUserImpl, User):
 
     avatar_hash: typing.Optional[str]
     """The user's avatar hash, if they have one, otherwise `builtins.None`."""
+
+    banner_hash: undefined.UndefinedOr[str]
+    """Banner hash of the user, if they have one, otherwise `builtins.None`"""
+
+    accent_color: undefined.UndefinedOr[colors.Color]
+    """The custom banner color for the user, if set.
+
+    The official client will decide the default color if not set.
+    """  # noqa: D401 - Imperative mood
 
     is_bot: bool
     """`builtins.True` if this user is a bot account, `builtins.False` otherwise."""
