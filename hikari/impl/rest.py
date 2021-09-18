@@ -33,7 +33,6 @@ __all__: typing.List[str] = ["ClientCredentialsStrategy", "RESTApp", "RESTClient
 import asyncio
 import base64
 import collections
-import contextlib
 import copy
 import datetime
 import http
@@ -684,7 +683,7 @@ class RESTClientImpl(rest_api.RESTClient):
         compiled_route: routes.CompiledRoute,
         *,
         query: typing.Optional[data_binding.StringMapBuilder] = None,
-        form: typing.Optional[aiohttp.FormData] = None,
+        form: typing.Optional[data_binding.URLEncodedFormBuilder] = None,
         json: typing.Union[data_binding.JSONObjectBuilder, data_binding.JSONArray, None] = None,
         reason: undefined.UndefinedOr[str] = undefined.UNDEFINED,
         no_auth: bool = False,
@@ -719,6 +718,8 @@ class RESTClientImpl(rest_api.RESTClient):
 
         while True:
             try:
+                built_form = await form.build() if form else None
+
                 uuid = time.uuid()
                 async with live_attributes.still_alive().buckets.acquire(compiled_route):
                     # Buckets not using authentication still have a global
@@ -744,7 +745,7 @@ class RESTClientImpl(rest_api.RESTClient):
                         headers=headers,
                         params=query,
                         json=json,
-                        data=form,
+                        data=built_form,
                         allow_redirects=self._http_settings.max_redirects is not None,
                         max_redirects=self._http_settings.max_redirects,
                         proxy=self._proxy_settings.url,
@@ -1297,20 +1298,13 @@ class RESTClientImpl(rest_api.RESTClient):
         body.put("embeds", serialized_embeds)
 
         if final_attachments:
-            form = data_binding.URLEncodedForm()
+            form = data_binding.URLEncodedFormBuilder(executor=self._executor)
             form.add_field("payload_json", data_binding.dump_json(body), content_type=_APPLICATION_JSON)
 
-            stack = contextlib.AsyncExitStack()
+            for attachment in final_attachments:
+                form.add_resource(attachment)
 
-            try:
-                for i, attachment in enumerate(final_attachments):
-                    stream = await stack.enter_async_context(attachment.stream(executor=self._executor))
-                    mimetype = stream.mimetype or _APPLICATION_OCTET_STREAM
-                    form.add_field(f"file{i}", stream, filename=stream.filename, content_type=mimetype)
-
-                response = await self._request(route, form=form, query=query, no_auth=no_auth)
-            finally:
-                await stack.aclose()
+            response = await self._request(route, form=form, query=query, no_auth=no_auth)
         else:
             response = await self._request(route, json=body, query=query, no_auth=no_auth)
 
@@ -1489,19 +1483,13 @@ class RESTClientImpl(rest_api.RESTClient):
             body.put("attachments", None)
 
         if final_attachments:
-            form = data_binding.URLEncodedForm()
+            form = data_binding.URLEncodedFormBuilder(executor=self._executor)
             form.add_field("payload_json", data_binding.dump_json(body), content_type=_APPLICATION_JSON)
 
-            stack = contextlib.AsyncExitStack()
-            try:
-                for i, attachment in enumerate(final_attachments):
-                    stream = await stack.enter_async_context(attachment.stream(executor=self._executor))
-                    mimetype = stream.mimetype or _APPLICATION_OCTET_STREAM
-                    form.add_field(f"file{i}", stream, filename=stream.filename, content_type=mimetype)
+            for attachment in final_attachments:
+                form.add_resource(attachment)
 
-                response = await self._request(route, form=form, no_auth=no_auth)
-            finally:
-                await stack.aclose()
+            response = await self._request(route, form=form, no_auth=no_auth)
         else:
             response = await self._request(route, json=body, no_auth=no_auth)
 
@@ -2061,7 +2049,7 @@ class RESTClientImpl(rest_api.RESTClient):
         scopes: typing.Sequence[typing.Union[applications.OAuth2Scope, str]],
     ) -> applications.PartialOAuth2Token:
         route = routes.POST_TOKEN.compile()
-        form = data_binding.URLEncodedForm()
+        form = data_binding.URLEncodedFormBuilder()
         form.add_field("grant_type", "client_credentials")
         form.add_field("scope", " ".join(scopes))
 
@@ -2077,7 +2065,7 @@ class RESTClientImpl(rest_api.RESTClient):
         redirect_uri: str,
     ) -> applications.OAuth2AuthorizationToken:
         route = routes.POST_TOKEN.compile()
-        form = data_binding.URLEncodedForm()
+        form = data_binding.URLEncodedFormBuilder()
         form.add_field("grant_type", "authorization_code")
         form.add_field("code", code)
         form.add_field("redirect_uri", redirect_uri)
@@ -2097,7 +2085,7 @@ class RESTClientImpl(rest_api.RESTClient):
         ] = undefined.UNDEFINED,
     ) -> applications.OAuth2AuthorizationToken:
         route = routes.POST_TOKEN.compile()
-        form = data_binding.URLEncodedForm()
+        form = data_binding.URLEncodedFormBuilder()
         form.add_field("grant_type", "refresh_token")
         form.add_field("refresh_token", refresh_token)
 
@@ -2115,7 +2103,7 @@ class RESTClientImpl(rest_api.RESTClient):
         token: typing.Union[str, applications.PartialOAuth2Token],
     ) -> None:
         route = routes.POST_TOKEN_REVOKE.compile()
-        form = data_binding.URLEncodedForm()
+        form = data_binding.URLEncodedFormBuilder()
         form.add_field("token", str(token))
         await self._request(route, form=form, auth=self._gen_oauth2_token(client, client_secret))
 
